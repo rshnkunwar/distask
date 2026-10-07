@@ -62,5 +62,13 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
 </plist>
 EOF
 
+# Optionally package ZIP if requested or by default
+if [ "$1" == "--zip" ] || [ "$CREATE_ZIP" == "1" ]; then
+    echo "🗜️ Creating $APP_NAME.zip for release..."
+    rm -f "$APP_NAME.zip"
+    ditto -c -k --sequesterRsrc --keepParent "$BUNDLE_DIR" "$APP_NAME.zip"
+    echo "📦 Release archive created: $APP_NAME.zip"
+fi
+
 echo "✅ Successfully built $BUNDLE_DIR!"
 echo "👉 You can run it now with: open $BUNDLE_DIR"

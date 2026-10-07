@@ -1,4 +1,4 @@
-# 📋 DisTask for macOS
+# DisTask for macOS
 
 A native macOS menu bar app that lets you track your daily tasks, check them off as you go, and automatically push your completed tasks to a Discord channel at a scheduled time every day (or manually on-demand).
 
@@ -6,7 +6,7 @@ Built specifically for macOS using **Swift**, **SwiftUI**, and modern macOS APIs
 
 ---
 
-## ✨ Features
+## Features
 
 - **Menu Bar Utility**: Runs quietly in your macOS menu bar with zero Dock clutter (`LSUIElement`).
 - **Dynamic Menu Bar Badge**: Shows the number of completed tasks ready to push directly next to the menu bar icon (e.g. `[4]`).
@@ -42,16 +42,21 @@ Built specifically for macOS using **Swift**, **SwiftUI**, and modern macOS APIs
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Launching the App
+### ⚡ One-Line Install (Recommended)
 
-To run the pre-packaged application:
+Install and launch **DisTask** directly in your macOS `/Applications` with a single command:
 ```bash
-open DisTask.app
+curl -fsSL https://raw.githubusercontent.com/rshnkunwar/distask/main/install.sh | bash
 ```
+> This script automatically fetches the pre-built release (or compiles from source if no release asset is found), moves `DisTask.app` to your `/Applications` folder, clears macOS Gatekeeper quarantine, and launches it directly in your menu bar.
 
-Alternatively, you can run it directly from source:
+---
+
+### Manual Build & Run
+
+To run directly from source:
 ```bash
 swift run
 ```
@@ -67,7 +72,7 @@ You can drag `DisTask.app` into your `/Applications` folder for permanent access
 
 ---
 
-## ⚡ Setting Up Discord Delivery
+## Setting Up Discord Delivery
 
 1. In your Discord channel, go to **Channel Settings > Integrations > Webhooks**.
 2. Click **New Webhook**, name it (e.g. `DisTask Bot`), and click **Copy Webhook URL**.
@@ -78,7 +83,7 @@ You can drag `DisTask.app` into your `/Applications` folder for permanent access
 
 ---
 
-## ⏰ Configuring the Schedule
+## Configuring the Schedule
 
 1. Open **DisTask** from the menu bar.
 2. Click ⚙️ **Settings**.
@@ -91,7 +96,7 @@ You can drag `DisTask.app` into your `/Applications` folder for permanent access
 
 ---
 
-## 🧪 Running Unit & E2E Tests
+## Running Unit & E2E Tests
 
 The project includes an end-to-end test suite:
 ```bash
@@ -100,7 +105,7 @@ swift test
 
 ---
 
-## 📁 Storage & Configuration Location
+## Storage & Configuration Location
 
 - Tasks: `~/Library/Application Support/DisTask/tasks.json`
 - Settings: `~/Library/Application Support/DisTask/settings.json`
