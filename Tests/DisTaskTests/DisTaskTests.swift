@@ -143,6 +143,50 @@ struct DisTaskTests {
         #expect(lines.contains("- Bug fixes"))
     }
 
+    @Test("Custom code block template and task line formatting")
+    func testCustomCodeBlockFormatting() {
+        let tasks = [
+            TaskItem(title: "Design System Refactor", notes: "Use glassmorphism", isCompleted: true, priority: .high),
+            TaskItem(title: "Fix Discord Push Bug", isCompleted: true, priority: .medium)
+        ]
+
+        var customSettings = AppSettings()
+        customSettings.messageTemplate = "```md\n# {date} ({count} tasks)\n{tasks}\n```"
+        customSettings.taskLineFormat = "- [x] {title}"
+        customSettings.dateFormat = "yyyy-MM-dd"
+
+        let message = DiscordService.shared.formatTasksMessage(tasks: tasks, includeNotes: true, settings: customSettings)
+
+        let lines = message.components(separatedBy: "\n")
+        #expect(lines.first == "```md")
+        #expect(lines.last == "```")
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let expectedDate = dateFormatter.string(from: Date())
+
+        #expect(lines[1] == "# \(expectedDate) (2 tasks)")
+        #expect(lines.contains("- [x] Design System Refactor (Use glassmorphism)"))
+        #expect(lines.contains("- [x] Fix Discord Push Bug"))
+    }
+
+    @Test("Custom non-code-block Markdown list template")
+    func testCustomMarkdownListTemplate() {
+        let tasks = [
+            TaskItem(title: "Sprint Planning", isCompleted: true)
+        ]
+
+        var customSettings = AppSettings()
+        customSettings.messageTemplate = "**Daily Status - {date}**\n{tasks}"
+        customSettings.taskLineFormat = "• {title}"
+
+        let message = DiscordService.shared.formatTasksMessage(tasks: tasks, settings: customSettings)
+
+        #expect(!message.contains("```"))
+        #expect(message.contains("• Sprint Planning"))
+        #expect(message.hasPrefix("**Daily Status - "))
+    }
+
     // MARK: - 5. Schedule Engine & Anti-Duplicate Trigger
 
     @Test("ScheduleManager Next Push and Anti-Duplicate Trigger")

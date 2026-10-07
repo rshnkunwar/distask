@@ -3,18 +3,18 @@ import AppKit
 
 public enum SettingsTab: String, CaseIterable, Identifiable {
     case discord = "Discord"
+    case format = "Format"
     case schedule = "Schedule"
     case general = "General"
-    case data = "Data"
 
     public var id: String { rawValue }
 
     public var icon: String {
         switch self {
         case .discord: return "paperplane.fill"
+        case .format: return "curlybraces"
         case .schedule: return "alarm.fill"
         case .general: return "slider.horizontal.3"
-        case .data: return "cylinder.split.1x2.fill"
         }
     }
 }
@@ -36,6 +36,12 @@ public struct SettingsSheetView: View {
     @State private var clearAfterPush: Bool = false
     @State private var notifyOnPush: Bool = true
     @State private var showBadgeInMenuBar: Bool = true
+
+    // Format customization fields
+    @State private var messageTemplate: String = "```\n{date}\n{tasks}\n```"
+    @State private var taskLineFormat: String = "- {title}"
+    @State private var dateFormat: String = "MMM d"
+    @State private var selectedPreset: MessageFormatPreset = .codeBlock
 
     // Testing state
     @State private var isTesting: Bool = false
@@ -65,12 +71,12 @@ public struct SettingsSheetView: View {
                     switch selectedTab {
                     case .discord:
                         discordTabContent
+                    case .format:
+                        formatTabContent
                     case .schedule:
                         scheduleTabContent
                     case .general:
                         generalTabContent
-                    case .data:
-                        dataTabContent
                     }
                 }
                 .padding(14)
@@ -304,30 +310,195 @@ public struct SettingsSheetView: View {
                 }
             }
 
-            // Markdown Message Preview
-            settingsCard(title: "Discord Code Block Preview", icon: "text.quote", iconColor: .secondary) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Tasks are delivered formatted in a clean markdown code block:")
+            // Shortcut to Format Tab
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Pushed Message Format")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Customize code blocks, headers, bullets & timestamps.")
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
+                }
 
-                    let dateFormatter = DateFormatter()
-                    let _ = dateFormatter.dateFormat = "MMM d"
-                    let todayString = dateFormatter.string(from: Date())
+                Spacer()
 
-                    Text("```\n\(todayString)\n- Example completed task\n- Another finished item\n```")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.primary.opacity(0.85))
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.black.opacity(0.2))
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        selectedTab = .format
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Customize Format")
+                        Image(systemName: "arrow.right")
+                    }
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundColor(Color(red: 0.35, green: 0.40, blue: 0.95))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(10)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+            .cornerRadius(8)
+        }
+    }
+
+    // MARK: - Tab 2: Format & Code Block Customization
+
+    private var formatTabContent: some View {
+        VStack(spacing: 12) {
+            // Presets Card
+            settingsCard(title: "Format Presets", icon: "sparkles", iconColor: .purple) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(MessageFormatPreset.allCases) { preset in
+                                let isSelected = selectedPreset == preset
+                                Button {
+                                    applyPreset(preset)
+                                } label: {
+                                    Text(preset.rawValue)
+                                        .font(.system(size: 10.5, weight: isSelected ? .bold : .medium))
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 4)
+                                        .background(
+                                            isSelected ?
+                                                Color(red: 0.35, green: 0.40, blue: 0.95) :
+                                                Color.primary.opacity(0.07)
+                                        )
+                                        .foregroundColor(isSelected ? .white : .primary)
+                                        .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    Text("Choose a pre-configured template or freely customize below.")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Template Editor Card
+            settingsCard(title: "Message & Code Block Template", icon: "curlybraces", iconColor: Color(red: 0.35, green: 0.40, blue: 0.95)) {
+                VStack(alignment: .leading, spacing: 8) {
+                    // Quick placeholder chips
+                    HStack(spacing: 5) {
+                        Text("Insert:")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
+
+                        placeholderChip(tag: "{date}", label: "Date")
+                        placeholderChip(tag: "{tasks}", label: "Tasks")
+                        placeholderChip(tag: "{time}", label: "Time")
+                        placeholderChip(tag: "{count}", label: "Count")
+                    }
+
+                    // Multi-line editor
+                    TextEditor(text: $messageTemplate)
+                        .font(.system(size: 11, design: .monospaced))
+                        .frame(height: 75)
+                        .padding(4)
+                        .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
                         .cornerRadius(6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                        )
+                        .onChange(of: messageTemplate) { _ in
+                            checkAndUpdatePreset()
+                            saveCurrentValues()
+                        }
+
+                    Text("Enclose in ``` for Discord code block. {tasks} will be replaced with your list.")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Line Format & Date Options
+            settingsCard(title: "Task Line & Date Settings", icon: "text.alignleft", iconColor: .blue) {
+                VStack(alignment: .leading, spacing: 10) {
+                    // Task item line format
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Task Line Format:")
+                                .font(.system(size: 11, weight: .medium))
+                            Spacer()
+                            HStack(spacing: 4) {
+                                lineFormatChip("- {title}", label: "- Title")
+                                lineFormatChip("• {title}", label: "• Title")
+                                lineFormatChip("- [x] {title}", label: "[x] Title")
+                            }
+                        }
+
+                        TextField("- {title}", text: $taskLineFormat)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11, design: .monospaced))
+                            .onChange(of: taskLineFormat) { _ in
+                                checkAndUpdatePreset()
+                                saveCurrentValues()
+                            }
+
+                        Text("Tags: {title}, {notes}, {priority}, {index}")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Divider()
+
+                    // Date format pattern
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Date Format Pattern:")
+                                .font(.system(size: 11, weight: .medium))
+                            Spacer()
+                            HStack(spacing: 4) {
+                                dateFormatChip("MMM d", label: "Oct 7")
+                                dateFormatChip("yyyy-MM-dd", label: "2026-10-07")
+                                dateFormatChip("EEEE, MMM d", label: "Full")
+                            }
+                        }
+
+                        TextField("MMM d", text: $dateFormat)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11, design: .monospaced))
+                            .onChange(of: dateFormat) { _ in saveCurrentValues() }
+                    }
+                }
+            }
+
+            // Live Output Preview
+            settingsCard(title: "Live Discord Output Preview", icon: "eye.fill", iconColor: .green) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        badge(text: "Live Preview", color: .green)
+                        Spacer()
+                        Button("Reset to Default") {
+                            resetToDefaultFormat()
+                        }
+                        .font(.system(size: 10))
+                        .buttonStyle(.plain)
+                        .foregroundColor(Color(red: 0.35, green: 0.40, blue: 0.95))
+                    }
+
+                    Text(renderedPreview)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.white)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(red: 0.16, green: 0.17, blue: 0.20))
+                        .cornerRadius(6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
                 }
             }
         }
     }
 
-    // MARK: - Tab 2: Schedule
+    // MARK: - Tab 3: Schedule
 
     private var scheduleTabContent: some View {
         VStack(spacing: 12) {
@@ -428,7 +599,7 @@ public struct SettingsSheetView: View {
         }
     }
 
-    // MARK: - Tab 3: General
+    // MARK: - Tab 4: General & Maintenance
 
     private var generalTabContent: some View {
         VStack(spacing: 12) {
@@ -481,13 +652,7 @@ public struct SettingsSheetView: View {
                     }
                 }
             }
-        }
-    }
 
-    // MARK: - Tab 4: Data & Maintenance
-
-    private var dataTabContent: some View {
-        VStack(spacing: 12) {
             // Queue & Archive Actions
             settingsCard(title: "Queue & Archive Actions", icon: "arrow.triangle.2.circlepath", iconColor: .indigo) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -586,7 +751,109 @@ public struct SettingsSheetView: View {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Helpers & Format Chips
+
+    private func placeholderChip(tag: String, label: String) -> some View {
+        Button {
+            messageTemplate += (messageTemplate.hasSuffix("\n") ? "" : "\n") + tag
+            saveCurrentValues()
+        } label: {
+            Text("+\(label)")
+                .font(.system(size: 9.5, weight: .medium))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.primary.opacity(0.08))
+                .foregroundColor(.primary)
+                .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func lineFormatChip(_ format: String, label: String) -> some View {
+        Button {
+            taskLineFormat = format
+            saveCurrentValues()
+        } label: {
+            Text(label)
+                .font(.system(size: 9.5))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(taskLineFormat == format ? Color(red: 0.35, green: 0.40, blue: 0.95).opacity(0.15) : Color.primary.opacity(0.06))
+                .foregroundColor(taskLineFormat == format ? Color(red: 0.35, green: 0.40, blue: 0.95) : .secondary)
+                .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func dateFormatChip(_ pattern: String, label: String) -> some View {
+        Button {
+            dateFormat = pattern
+            saveCurrentValues()
+        } label: {
+            Text(label)
+                .font(.system(size: 9.5))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(dateFormat == pattern ? Color.blue.opacity(0.15) : Color.primary.opacity(0.06))
+                .foregroundColor(dateFormat == pattern ? .blue : .secondary)
+                .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var renderedPreview: String {
+        let sampleTasks = [
+            TaskItem(title: "New designed category", isCompleted: true, priority: .high),
+            TaskItem(title: "LR fixes", isCompleted: true, priority: .medium),
+            TaskItem(title: "Meeting with team", notes: "Discuss roadmap", isCompleted: true, priority: .low)
+        ]
+        let previewSettings = AppSettings(
+            discordWebhookUrl: webhookUrl,
+            botUsername: botUsername,
+            avatarUrl: avatarUrl,
+            scheduledHour: scheduledHour,
+            scheduledMinute: scheduledMinute,
+            isScheduleEnabled: isScheduleEnabled,
+            scheduleDays: scheduleDays,
+            includeNotesInDiscord: includeNotes,
+            clearTasksAfterPush: clearAfterPush,
+            notifyOnPush: notifyOnPush,
+            showCompletedCountInMenuBar: showBadgeInMenuBar,
+            messageTemplate: messageTemplate,
+            taskLineFormat: taskLineFormat,
+            dateFormat: dateFormat
+        )
+        return DiscordService.shared.formatTasksMessage(
+            tasks: sampleTasks,
+            includeNotes: includeNotes,
+            settings: previewSettings
+        )
+    }
+
+    private func applyPreset(_ preset: MessageFormatPreset) {
+        selectedPreset = preset
+        if preset != .custom {
+            messageTemplate = preset.template
+            taskLineFormat = preset.defaultTaskFormat
+        }
+        saveCurrentValues()
+    }
+
+    private func checkAndUpdatePreset() {
+        for preset in MessageFormatPreset.allCases where preset != .custom {
+            if messageTemplate == preset.template && taskLineFormat == preset.defaultTaskFormat {
+                selectedPreset = preset
+                return
+            }
+        }
+        selectedPreset = .custom
+    }
+
+    private func resetToDefaultFormat() {
+        applyPreset(.codeBlock)
+        dateFormat = "MMM d"
+        saveCurrentValues()
+    }
 
     private func badge(text: String, color: Color) -> some View {
         Text(text)
@@ -623,6 +890,11 @@ public struct SettingsSheetView: View {
         clearAfterPush = s.clearTasksAfterPush
         notifyOnPush = s.notifyOnPush
         showBadgeInMenuBar = s.showCompletedCountInMenuBar
+        messageTemplate = s.messageTemplate
+        taskLineFormat = s.taskLineFormat
+        dateFormat = s.dateFormat
+
+        checkAndUpdatePreset()
     }
 
     private func saveCurrentValues() {
@@ -637,6 +909,9 @@ public struct SettingsSheetView: View {
         taskStore.settings.clearTasksAfterPush = clearAfterPush
         taskStore.settings.notifyOnPush = notifyOnPush
         taskStore.settings.showCompletedCountInMenuBar = showBadgeInMenuBar
+        taskStore.settings.messageTemplate = messageTemplate
+        taskStore.settings.taskLineFormat = taskLineFormat
+        taskStore.settings.dateFormat = dateFormat
     }
 
     private func saveAndClose() {

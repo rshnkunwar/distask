@@ -52,21 +52,56 @@ public final class DiscordService: Sendable {
         return nil
     }
 
-    public func formatTasksMessage(tasks: [TaskItem], includeNotes: Bool = false) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM d"
-        let header = dateFormatter.string(from: Date())
+    public func formatTasksMessage(
+        tasks: [TaskItem],
+        includeNotes: Bool = false,
+        settings: AppSettings? = nil
+    ) -> String {
+        let appSettings = settings ?? AppSettings()
+        let dateFormatPattern = appSettings.dateFormat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "MMM d" : appSettings.dateFormat
 
-        var lines: [String] = ["```", header]
-        for task in tasks {
-            var line = "- \(task.title)"
-            if includeNotes && !task.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                line += " (\(task.notes.trimmingCharacters(in: .whitespacesAndNewlines)))"
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = dateFormatPattern
+        let dateString = dateFormatter.string(from: Date())
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        let timeString = timeFormatter.string(from: Date())
+
+        let rawTaskFormat = appSettings.taskLineFormat.trimmingCharacters(in: .whitespacesAndNewlines)
+        let taskFormat = rawTaskFormat.isEmpty ? "- {title}" : rawTaskFormat
+
+        var taskLines: [String] = []
+        for (index, task) in tasks.enumerated() {
+            var line = taskFormat
+                .replacingOccurrences(of: "{title}", with: task.title)
+                .replacingOccurrences(of: "{index}", with: "\(index + 1)")
+                .replacingOccurrences(of: "{priority}", with: task.priority.rawValue)
+
+            let cleanNotes = task.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.contains("{notes}") {
+                line = line.replacingOccurrences(of: "{notes}", with: cleanNotes)
+            } else if includeNotes && !cleanNotes.isEmpty {
+                line += " (\(cleanNotes))"
             }
-            lines.append(line)
+            taskLines.append(line)
         }
-        lines.append("```")
-        return lines.joined(separator: "\n")
+
+        let tasksBlock = taskLines.joined(separator: "\n")
+
+        var template = appSettings.messageTemplate
+        if template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            template = "```\n{date}\n{tasks}\n```"
+        }
+
+        let rendered = template
+            .replacingOccurrences(of: "{date}", with: dateString)
+            .replacingOccurrences(of: "{time}", with: timeString)
+            .replacingOccurrences(of: "{tasks}", with: tasksBlock)
+            .replacingOccurrences(of: "{count}", with: "\(tasks.count)")
+            .replacingOccurrences(of: "{username}", with: appSettings.botUsername)
+
+        return rendered
     }
 
     public func sendTasks(
@@ -88,7 +123,11 @@ public final class DiscordService: Sendable {
             return DiscordPushResult(success: true, message: "No completed tasks to push.", taskCount: 0)
         }
 
-        let messageContent = formatTasksMessage(tasks: tasks, includeNotes: settings.includeNotesInDiscord)
+        let messageContent = formatTasksMessage(
+            tasks: tasks,
+            includeNotes: settings.includeNotesInDiscord,
+            settings: settings
+        )
 
         var payload: [String: Any] = [
             "content": messageContent
@@ -139,17 +178,15 @@ public final class DiscordService: Sendable {
             throw NSError(domain: "DiscordService", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid Webhook URL"])
         }
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM d"
-        let header = dateFormatter.string(from: Date())
-
-        let testContent = """
-```
-\(header)
-- Test task 1: Discord connection verified
-- Test task 2: Checked tasks will be sent in this format
-```
-"""
+        let sampleTasks = [
+            TaskItem(title: "Discord connection verified", isCompleted: true),
+            TaskItem(title: "Tasks will be pushed in this format", isCompleted: true)
+        ]
+        let testContent = formatTasksMessage(
+            tasks: sampleTasks,
+            includeNotes: settings.includeNotesInDiscord,
+            settings: settings
+        )
 
         var payload: [String: Any] = [
             "content": testContent
