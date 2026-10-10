@@ -838,7 +838,20 @@
     }
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // Automatically unregister any active service worker and delete cache on localhost
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const reg of registrations) {
+            reg.unregister();
+          }
+        });
+        if ('caches' in window) {
+          caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+        }
+      } else {
+        const swPath = window.location.pathname.startsWith('/distask') ? '/distask/sw.js' : '/sw.js';
+        navigator.serviceWorker.register(swPath).catch(() => {});
+      }
     }
   }
 
