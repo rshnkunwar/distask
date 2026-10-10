@@ -2,7 +2,9 @@
 
 A native macOS menu bar app that lets you track your daily tasks, check them off as you go, and automatically push your completed tasks to a Discord channel at a scheduled time every day (or manually on-demand).
 
-Built specifically for macOS using **Swift**, **SwiftUI**, and modern macOS APIs.
+Built for macOS using **Swift**, **SwiftUI**, and modern macOS APIs — now also featuring a **24/7 Cloud Web App (PWA)** that can be hosted on **Vercel** with your own custom domain so you can manage your weekly tasks from your phone without keeping your computer open!
+
+See the [Deployment Guide](DEPLOYMENT.md) for 1-click Vercel and custom domain setup.
 
 ---
 

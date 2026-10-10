@@ -1,0 +1,16 @@
+{
+  "name": "distask",
+  "version": "1.0.0",
+  "description": "DisTask - Native macOS & 24/7 Cloud Web Task Tracker with Discord Auto-Push",
+  "scripts": {
+    "start": "node web/server.js",
+    "dev": "node --watch web/server.js",
+    "install:web": "npm --prefix web install",
+    "postinstall": "npm --prefix web install"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3"
+  }
+}

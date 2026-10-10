@@ -7,3 +7,9 @@ DerivedData/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
 *.zip
+node_modules/
+web/node_modules/
+web/data/
+*.tmp*
+.env
+.vercel
