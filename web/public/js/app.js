@@ -130,6 +130,12 @@
       .replace(/'/g, '&#039;');
   }
 
+  function apiUrl(endpoint) {
+    const clean = endpoint.replace(/^\/(distask\/)?api\/?/, '');
+    const base = window.location.pathname.includes('/distask') ? '/distask/api' : '/api';
+    return `${base}/${clean}`;
+  }
+
   // --- Authenticated Fetch Helper ---
   async function authFetch(url, options = {}) {
     if (!options.headers) options.headers = {};
@@ -137,7 +143,8 @@
       options.headers['Authorization'] = `Bearer ${state.token}`;
     }
 
-    const res = await fetch(url, options);
+    const targetUrl = url.startsWith('http') ? url : apiUrl(url);
+    const res = await fetch(targetUrl, options);
     if (res.status === 401) {
       logout();
       showToast('Session expired or unauthorized. Please sign in.', 'error');
@@ -150,7 +157,7 @@
   // --- Auth Management ---
   async function checkAuth() {
     try {
-      const configRes = await fetch('/api/auth/config');
+      const configRes = await fetch(apiUrl('/api/auth/config'));
       const configData = await configRes.json();
       state.requiresInviteCode = !!configData.requiresInviteCode;
 
@@ -231,7 +238,7 @@
     elements.authSubmitBtn.textContent = state.authMode === 'login' ? 'Signing in...' : 'Creating account...';
     elements.authErrorMsg.classList.add('hidden');
 
-    const endpoint = state.authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+    const endpoint = state.authMode === 'login' ? apiUrl('/api/auth/login') : apiUrl('/api/auth/register');
     const body = { username, password };
     if (state.authMode === 'register' && inviteCode) {
       body.inviteCode = inviteCode;
@@ -831,7 +838,7 @@
     }
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('sw.js').catch(() => {});
     }
   }
 

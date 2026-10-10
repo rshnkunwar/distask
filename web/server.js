@@ -19,7 +19,10 @@ const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static assets for both root domain and /distask subpath
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/distask', express.static(path.join(__dirname, 'public')));
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -63,8 +66,6 @@ async function kvCommand(cmdArray) {
 }
 
 // In-Memory Multi-Tenant Cache
-// users: { [username.toLowerCase()]: { id, username, hash, salt, createdAt } }
-// userData: { [userId]: { tasks: [...], settings: {...} } }
 let usersCache = {};
 let userDataCache = {};
 
@@ -114,7 +115,7 @@ function createDefaultTasks() {
   return [
     {
       id: `task-${Date.now()}-1`,
-      title: 'Review team updates & weekly goals',
+      title: 'Review weekly goals & team tasks',
       notes: 'DisTask 24/7 Cloud',
       priority: 'high',
       dayOfWeek: 'mon',
@@ -139,7 +140,6 @@ function createDefaultTasks() {
   ];
 }
 
-// Sync from KV if enabled
 async function syncFromCloudKV() {
   if (KV_URL && KV_TOKEN) {
     const remoteUsers = await kvCommand(['GET', 'distask_users']);
@@ -226,7 +226,6 @@ async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Session expired or invalid. Please sign in again.' });
   }
 
-  // Find user object
   const user = Object.values(usersCache).find(u => u.id === userId);
   if (!user) {
     return res.status(401).json({ error: 'User account not found.' });
@@ -374,7 +373,6 @@ async function executePushForUser(userId, { isAutomated = false }) {
   const settings = userStore.settings;
   const targetTasks = userStore.tasks.filter(t => t.isCompleted && !t.isPushed);
 
-  // Skip if empty queue ("when i check them up, they should be pushed else no push required")
   if (targetTasks.length === 0) {
     return {
       success: true,
@@ -494,7 +492,6 @@ async function runScheduledCronChecks() {
 
     if (!settings.isScheduleEnabled || !settings.discordWebhookUrl) continue;
 
-    // Timezone check
     let currentHour = now.getHours();
     let currentMinute = now.getMinutes();
 
@@ -515,13 +512,11 @@ async function runScheduledCronChecks() {
       continue;
     }
 
-    // Weekdays check
     if (settings.scheduleDays === 'weekdaysOnly') {
       const day = now.getDay();
       if (day === 0 || day === 6) continue;
     }
 
-    // Anti-duplicate check
     if (settings.lastPushedDate) {
       const last = new Date(settings.lastPushedDate);
       if (last.toDateString() === now.toDateString()) continue;
@@ -548,10 +543,11 @@ if (!process.env.VERCEL) {
   });
 }
 
-// ==================== AUTH ENDPOINTS ====================
+// ==================== API ROUTER (MOUNTED ON BOTH /api AND /distask/api) ====================
+const apiRouter = express.Router();
 
-// Public Registration
-app.post('/api/auth/register', async (req, res) => {
+// Registration
+apiRouter.post('/auth/register', async (req, res) => {
   await syncFromCloudKV();
 
   const { username, password, inviteCode } = req.body;
@@ -565,7 +561,6 @@ app.post('/api/auth/register', async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 6 characters.' });
   }
 
-  // Check invite code if configured on server
   if (INVITE_CODE && INVITE_CODE.trim() !== '') {
     if ((inviteCode || '').trim() !== INVITE_CODE.trim()) {
       return res.status(403).json({ error: 'Invalid invite code. Ask your admin for access.' });
@@ -589,7 +584,6 @@ app.post('/api/auth/register', async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  // Initialize fresh user store
   userDataCache[userId] = {
     tasks: createDefaultTasks(),
     settings: { ...DEFAULT_SETTINGS }
@@ -606,7 +600,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // Login
-app.post('/api/auth/login', async (req, res) => {
+apiRouter.post('/auth/login', async (req, res) => {
   await syncFromCloudKV();
 
   const { username, password } = req.body;
@@ -629,26 +623,23 @@ app.post('/api/auth/login', async (req, res) => {
   });
 });
 
-// Current User Profile
-app.get('/api/auth/me', requireAuth, (req, res) => {
+// Profile & Config
+apiRouter.get('/auth/me', requireAuth, (req, res) => {
   res.json({
     user: { id: req.user.id, username: req.user.username, displayName: req.user.displayName || req.user.username },
     requiresInviteCode: !!INVITE_CODE
   });
 });
 
-// Public Server Config Check
-app.get('/api/auth/config', (req, res) => {
+apiRouter.get('/auth/config', (req, res) => {
   res.json({
     requiresInviteCode: !!INVITE_CODE,
     hasRegisteredUsers: Object.keys(usersCache).length > 0
   });
 });
 
-// ==================== PROTECTED USER ENDPOINTS ====================
-
 // Tasks
-app.get('/api/tasks', requireAuth, (req, res) => {
+apiRouter.get('/tasks', requireAuth, (req, res) => {
   const store = getUserStore(req.userId);
   const tasks = store.tasks;
   res.json({
@@ -662,7 +653,7 @@ app.get('/api/tasks', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/tasks', requireAuth, async (req, res) => {
+apiRouter.post('/tasks', requireAuth, async (req, res) => {
   const { title, notes = '', priority = 'medium', dayOfWeek = 'all' } = req.body;
   if (!title || !title.trim()) {
     return res.status(400).json({ error: 'Task title is required.' });
@@ -687,7 +678,7 @@ app.post('/api/tasks', requireAuth, async (req, res) => {
   res.status(201).json(newTask);
 });
 
-app.put('/api/tasks/:id', requireAuth, async (req, res) => {
+apiRouter.put('/tasks/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const { title, notes, priority, dayOfWeek } = req.body;
   const store = getUserStore(req.userId);
@@ -706,7 +697,7 @@ app.put('/api/tasks/:id', requireAuth, async (req, res) => {
   res.json(store.tasks[index]);
 });
 
-app.patch('/api/tasks/:id/toggle', requireAuth, async (req, res) => {
+apiRouter.patch('/tasks/:id/toggle', requireAuth, async (req, res) => {
   const { id } = req.params;
   const store = getUserStore(req.userId);
   const index = store.tasks.findIndex(t => t.id === id);
@@ -731,7 +722,7 @@ app.patch('/api/tasks/:id/toggle', requireAuth, async (req, res) => {
   res.json(store.tasks[index]);
 });
 
-app.patch('/api/tasks/:id/requeue', requireAuth, async (req, res) => {
+apiRouter.patch('/tasks/:id/requeue', requireAuth, async (req, res) => {
   const { id } = req.params;
   const store = getUserStore(req.userId);
   const index = store.tasks.findIndex(t => t.id === id);
@@ -747,7 +738,7 @@ app.patch('/api/tasks/:id/requeue', requireAuth, async (req, res) => {
   res.json(store.tasks[index]);
 });
 
-app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
+apiRouter.delete('/tasks/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const store = getUserStore(req.userId);
   store.tasks = store.tasks.filter(t => t.id !== id);
@@ -755,7 +746,7 @@ app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/tasks/clear-pushed', requireAuth, async (req, res) => {
+apiRouter.post('/tasks/clear-pushed', requireAuth, async (req, res) => {
   const store = getUserStore(req.userId);
   store.tasks = store.tasks.filter(t => !(t.isCompleted && t.isPushed));
   await persistUserData();
@@ -763,7 +754,7 @@ app.post('/api/tasks/clear-pushed', requireAuth, async (req, res) => {
 });
 
 // Settings & Schedule
-app.get('/api/settings', requireAuth, (req, res) => {
+apiRouter.get('/settings', requireAuth, (req, res) => {
   const store = getUserStore(req.userId);
   const scheduleInfo = getNextPushInfo(store.settings);
   res.json({
@@ -772,7 +763,7 @@ app.get('/api/settings', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/settings', requireAuth, async (req, res) => {
+apiRouter.post('/settings', requireAuth, async (req, res) => {
   const store = getUserStore(req.userId);
   store.settings = { ...store.settings, ...req.body };
   await persistUserData();
@@ -784,7 +775,7 @@ app.post('/api/settings', requireAuth, async (req, res) => {
 });
 
 // Manual Push to Discord
-app.post('/api/push', requireAuth, async (req, res) => {
+apiRouter.post('/push', requireAuth, async (req, res) => {
   try {
     const result = await executePushForUser(req.userId, { isAutomated: false });
     res.json(result);
@@ -794,7 +785,7 @@ app.post('/api/push', requireAuth, async (req, res) => {
 });
 
 // Test Discord Webhook
-app.post('/api/test-webhook', requireAuth, async (req, res) => {
+apiRouter.post('/test-webhook', requireAuth, async (req, res) => {
   const store = getUserStore(req.userId);
   const webhookUrl = (req.body.webhookUrl || store.settings.discordWebhookUrl || '').trim();
   const validation = validateWebhookUrl(webhookUrl);
@@ -827,8 +818,8 @@ app.post('/api/test-webhook', requireAuth, async (req, res) => {
   }
 });
 
-// Multi-User Automated Cron Trigger (Vercel Cron)
-app.all('/api/cron', async (req, res) => {
+// Multi-User Automated Cron Trigger
+apiRouter.all('/cron', async (req, res) => {
   if (CRON_SECRET) {
     const authHeader = req.headers.authorization;
     const secretQuery = req.query.secret;
@@ -847,7 +838,7 @@ app.all('/api/cron', async (req, res) => {
 });
 
 // Health check
-app.get('/api/health', (req, res) => {
+apiRouter.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     uptimeSeconds: Math.floor(process.uptime()),
@@ -856,6 +847,15 @@ app.get('/api/health', (req, res) => {
     userCount: Object.keys(usersCache).length,
     hasKv: !!(KV_URL && KV_TOKEN)
   });
+});
+
+// Mount router on BOTH `/api` and `/distask/api`
+app.use('/api', apiRouter);
+app.use('/distask/api', apiRouter);
+
+// Serve HTML for /distask subpath
+app.get(['/distask', '/distask/'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 if (!process.env.VERCEL) {
